@@ -1,0 +1,12 @@
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+pydantic==2.6.4
+python-dotenv==1.0.1
+psycopg2-binary==2.9.9
+pymysql==1.1.0
+cryptography==42.0.5
+pymongo==4.6.3
+pymssql==2.2.11
+oracledb==2.1.2
+faker==24.4.0
+requests==2.31.0

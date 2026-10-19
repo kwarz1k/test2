@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Сравнение 6 СУБД — Бенчмарк и CRUD</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Axios CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="p-2.5 bg-gradient-to-tr from-indigo-600 to-cyan-500 rounded-xl shadow-lg shadow-indigo-500/20">
+          <i data-lucide="database" class="w-6 h-6 text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            Database Benchmark & CRUD Dashboard
+            <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 font-mono font-medium border border-indigo-500/30">6 СУБД</span>
+          </h1>
+          <p class="text-xs text-slate-400">PostgreSQL • SQLite • MySQL • MongoDB • MsSQL • Oracle Database</p>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="flex items-center flex-wrap gap-2">
+        <button id="btnSeedAll" onclick="seedData('all')" class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 transition shadow-sm text-white">
+          <i data-lucide="database-zap" class="w-4 h-4"></i>
+          Заполнить 1000 записей
+        </button>
+        <button id="btnRunBenchmark" onclick="runBenchmarkSuite()" class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 transition shadow-sm text-white">
+          <i data-lucide="gauge" class="w-4 h-4"></i>
+          Запустить бенчмарк
+        </button>
+        <button onclick="openCreateUserModal()" class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-cyan-600 hover:bg-cyan-500 transition shadow-sm text-white">
+          <i data-lucide="user-plus" class="w-4 h-4"></i>
+          Добавить запись
+        </button>
+        <button onclick="loadStatuses()" title="Обновить статус БД" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Database Status Grid -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full">
+    <div class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+      <span>Статус подключения и количество записей</span>
+      <span id="statusLastUpdated" class="text-slate-500 font-mono">Обновление...</span>
+    </div>
+    <div id="statusGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <!-- Status cards loaded dynamically -->
+      <div class="p-3 bg-slate-900 border border-slate-800 rounded-xl animate-pulse h-20"></div>
+      <div class="p-3 bg-slate-900 border border-slate-800 rounded-xl animate-pulse h-20"></div>
+      <div class="p-3 bg-slate-900 border border-slate-800 rounded-xl animate-pulse h-20"></div>
+      <div class="p-3 bg-slate-900 border border-slate-800 rounded-xl animate-pulse h-20"></div>
+      <div class="p-3 bg-slate-900 border border-slate-800 rounded-xl animate-pulse h-20"></div>
+      <div class="p-3 bg-slate-900 border border-slate-800 rounded-xl animate-pulse h-20"></div>
+    </div>
+  </section>
+
+  <!-- Main Content Area: Charts & CRUD -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 w-full flex-grow space-y-6">
+
+    <!-- Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Chart 1: Latency of last operation -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="timer" class="w-4 h-4 text-cyan-400"></i>
+            <h2 class="text-sm font-bold text-white">Время последней операции (мс)</h2>
+          </div>
+          <span id="lastOpBadge" class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">Ожидание запроса...</span>
+        </div>
+        <div class="h-64 relative">
+          <canvas id="chartLastOp"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 2: Aggregated operation speed comparison -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="bar-chart-3" class="w-4 h-4 text-indigo-400"></i>
+            <h2 class="text-sm font-bold text-white">Средняя скорость по операциям (мс)</h2>
+          </div>
+          <button onclick="clearStatsHistory()" class="text-xs text-rose-400 hover:text-rose-300 transition underline">Очистить историю</button>
+        </div>
+        <div class="h-64 relative">
+          <canvas id="chartAggregated"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search & Filter Bar -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+      <form id="searchForm" onsubmit="event.preventDefault(); handleSearch();" class="flex flex-wrap items-center gap-3">
+        <div class="relative flex-grow min-w-[240px]">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+          <input 
+            type="text" 
+            id="searchInput" 
+            placeholder="Поиск по ФИО или должности (например: Иванов, Backend, QA)..." 
+            class="w-full bg-slate-950 border border-slate-700 rounded-xl pl-10 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition"
+          >
+        </div>
+
+        <div class="flex items-center gap-2">
+          <select id="selectTargetDb" class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500">
+            <option value="all">Все базы (Сравнить скорость)</option>
+            <option value="postgres">PostgreSQL</option>
+            <option value="sqlite">SQLite</option>
+            <option value="mysql">MySQL</option>
+            <option value="mongodb">MongoDB</option>
+            <option value="mssql">MsSQL</option>
+            <option value="oracle">Oracle</option>
+          </select>
+
+          <button type="submit" class="flex items-center gap-1.5 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm rounded-xl transition shadow">
+            <i data-lucide="search" class="w-4 h-4"></i>
+            Искать
+          </button>
+        </div>
+      </form>
+
+      <!-- Operation Timing Pill Badges -->
+      <div id="timingsBanner" class="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-2 text-xs">
+        <span class="text-slate-400 font-medium">Отклик поиска:</span>
+        <div id="timingsBadges" class="flex flex-wrap gap-2">
+          <span class="text-slate-500 italic">Выполните поиск или действие</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Tabs: Users vs Logs -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+      <!-- Tab Headers -->
+      <div class="flex items-center justify-between border-b border-slate-800 px-4 pt-2">
+        <div class="flex space-x-2">
+          <button id="tabBtnUsers" onclick="switchTab('users')" class="px-4 py-2.5 text-sm font-semibold border-b-2 border-cyan-500 text-cyan-400 transition flex items-center gap-2">
+            <i data-lucide="users" class="w-4 h-4"></i>
+            Пользователи (<span id="userCountBadge">0</span>)
+          </button>
+          <button id="tabBtnLogs" onclick="switchTab('logs')" class="px-4 py-2.5 text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition flex items-center gap-2">
+            <i data-lucide="list-ordered" class="w-4 h-4"></i>
+            Логи и статистика скорости
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab Content 1: Users Table -->
+      <div id="tabContentUsers" class="p-0 overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs sm:text-sm">
+          <thead>
+            <tr class="bg-slate-950/60 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+              <th class="py-3 px-4 w-16">ID</th>
+              <th class="py-3 px-4">ФИО</th>
+              <th class="py-3 px-4">Профессия / Должность</th>
+              <th class="py-3 px-4">Отдел</th>
+              <th class="py-3 px-4">Зарплата</th>
+              <th class="py-3 px-4">Создан</th>
+              <th class="py-3 px-4 text-right">Действия</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody" class="divide-y divide-slate-800/60 font-normal">
+            <tr>
+              <td colspan="7" class="py-8 text-center text-slate-500">
+                Загрузка данных...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tab Content 2: Logs Table -->
+      <div id="tabContentLogs" class="p-0 overflow-x-auto hidden">
+        <table class="w-full text-left border-collapse text-xs sm:text-sm">
+          <thead>
+            <tr class="bg-slate-950/60 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+              <th class="py-3 px-4 w-20">Время</th>
+              <th class="py-3 px-4">Операция</th>
+              <th class="py-3 px-4">База данных</th>
+              <th class="py-3 px-4">Время (мс)</th>
+              <th class="py-3 px-4">Затронуто</th>
+              <th class="py-3 px-4">Детали / Запрос</th>
+            </tr>
+          </thead>
+          <tbody id="logsTableBody" class="divide-y divide-slate-800/60 font-normal">
+            <tr>
+              <td colspan="6" class="py-8 text-center text-slate-500">
+                Логи пока пусты
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal: Create / Edit User -->
+  <div id="userModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 id="modalTitle" class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="user-edit" class="w-5 h-5 text-cyan-400"></i>
+          Добавить пользователя
+        </h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="userForm" onsubmit="event.preventDefault(); saveUser();" class="space-y-4 text-xs sm:text-sm">
+        <input type="hidden" id="formUserId">
+
+        <div>
+          <label class="block text-slate-300 font-medium mb-1">ФИО *</label>
+          <input type="text" id="formFullName" required placeholder="Например: Иванов Иван Иванович" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500">
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-medium mb-1">Профессия / Должность *</label>
+          <input type="text" id="formProfession" required placeholder="Например: Backend-разработчик" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-300 font-medium mb-1">Отдел</label>
+            <input type="text" id="formDepartment" placeholder="Разработка" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500">
+          </div>
+          <div>
+            <label class="block text-slate-300 font-medium mb-1">Зарплата (руб.)</label>
+            <input type="number" id="formSalary" placeholder="150000" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-medium mb-1">Применить операцию к:</label>
+          <select id="formTargetDb" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500">
+            <option value="all">Во все 6 баз данных (Одновременно)</option>
+            <option value="postgres">Только PostgreSQL</option>
+            <option value="sqlite">Только SQLite</option>
+            <option value="mysql">Только MySQL</option>
+            <option value="mongodb">Только MongoDB</option>
+            <option value="mssql">Только MsSQL</option>
+            <option value="oracle">Только Oracle</option>
+          </select>
+        </div>
+
+        <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
+          <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition">Отмена</button>
+          <button type="submit" id="btnSaveUser" class="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition flex items-center gap-1.5 shadow">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            Сохранить
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Notification Toast Container -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800/60 bg-slate-950 py-4 text-center text-xs text-slate-500">
+    Сравнительный стенд СУБД • PostgreSQL, SQLite, MySQL, MongoDB, MsSQL, Oracle • Время замеряется с точностью до микросекунд (time.perf_counter)
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
